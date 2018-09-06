@@ -18,6 +18,9 @@ import pandas as pd
 
 dat = pd.read_csv('data/creditdataset.csv')
 
+ivlist=iv(dt_s, y="creditability")
+ivlist
+
 # filter variable via missing rate, iv, identical value rate
 dt_s = var_filter(dat, y="creditability", iv_limit=0.02)
 
@@ -27,7 +30,7 @@ train, test = split_df(dt_s, 'creditability', ratio = [0.7, 0.3]).values()
 # woe binning ------
 
 bins = woebin(dt_s, y="creditability")
-woebin_plot(bins)
+# woebin_plot(bins)
 
 # binning adjustment
 # # adjust breaks interactively
@@ -38,10 +41,6 @@ breaks_adj = {
     'other.debtors.or.guarantors': ["none", "co-applicant%,%guarantor"]
 }
 bins_adj = woebin(dt_s, y="creditability", breaks_list=breaks_adj)
-
-
-ivlist=iv(dt_s, y="creditability")
-ivlist
 
 
 # converting train and test into woe values
