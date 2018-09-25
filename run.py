@@ -18,8 +18,9 @@ import pandas as pd
 
 dat = pd.read_csv('data/creditdataset.csv')
 
-ivlist=iv(dt_s, y="creditability")
+ivlist=iv(dat, y="creditability")
 ivlist
+
 
 # filter variable via missing rate, iv, identical value rate
 dt_s = var_filter(dat, y="creditability", iv_limit=0.02)
@@ -30,7 +31,7 @@ train, test = split_df(dt_s, 'creditability', ratio = [0.7, 0.3]).values()
 # woe binning ------
 
 bins = woebin(dt_s, y="creditability")
-# woebin_plot(bins)
+#woebin_plot(bins)
 
 # binning adjustment
 # # adjust breaks interactively
@@ -83,3 +84,130 @@ perf_psi(
   score = {'train':train_score, 'test':test_score},
   label = {'train':y_train, 'test':y_test}
 )
+
+
+
+from sklearn import metrics
+
+y_pred_df = pd.DataFrame( { 'actual': y_test, "predicted_prob": test_pred } )
+y_pred_df['predicted'] = y_pred_df.predicted_prob.map( lambda x: 1 if x > 0.5 else 0)
+
+import matplotlib.pylab as plt
+
+# Confusion Matrix
+import seaborn as sn
+
+def draw_cm( actual, predicted ):
+    cm = metrics.confusion_matrix( actual, predicted, [1,0] )
+    sn.heatmap(cm, annot=True,  fmt='.2f', xticklabels = ["Default", "No Default"] , yticklabels = ["Default", "No Default"] )
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    plt.show()
+
+draw_cm( y_pred_df.actual, y_pred_df.predicted )
+
+
+# Overall accuracy of the model
+import numpy as np
+
+print( 'Total Accuracy : ',np.round( metrics.accuracy_score( y_test, y_pred_df.predicted ), 2 ) )
+print( 'Precision : ',np.round( metrics.precision_score( y_test, y_pred_df.predicted ), 2 ) )
+print( 'Recall : ',np.round( metrics.recall_score( y_test, y_pred_df.predicted ), 2 ) )
+
+cm1 = metrics.confusion_matrix( y_pred_df.actual, y_pred_df.predicted, [1,0] )
+
+sensitivity = cm1[0,0]/(cm1[0,0]+cm1[0,1])
+print('Sensitivity : ', round( sensitivity, 2) )
+
+specificity = cm1[1,1]/(cm1[1,0]+cm1[1,1])
+print('Specificity : ', round( specificity, 2 ) )
+
+# Predicted Probability distribution Plots for Defaults and Non Defaults
+#sn.distplot( y_pred_df[y_pred_df.actual == 1]["predicted_prob"], kde=False, color = 'b' )
+#sn.distplot( y_pred_df[y_pred_df.actual == 0]["predicted_prob"], kde=False, color = 'g' )
+
+
+auc_score = metrics.roc_auc_score( y_pred_df.actual, y_pred_df.predicted_prob  )
+round( float( auc_score ), 2 )
+
+def draw_roc( actual, probs ):
+    fpr, tpr, thresholds = metrics.roc_curve( actual, probs,
+                                              drop_intermediate = False )
+    auc_score = metrics.roc_auc_score( actual, probs )
+    plt.figure(figsize=(6, 4))
+    plt.plot( fpr, tpr, label='ROC curve (area = %0.2f)' % auc_score )
+    plt.plot([0, 1], [0, 1], 'k--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate or [1 - True Negative Rate]')
+    plt.ylabel('True Positive Rate')
+    plt.title('ROC')
+    plt.legend(loc="lower right")
+    plt.show()
+
+    return fpr, tpr, thresholds
+
+fpr, tpr, thresholds = draw_roc( y_pred_df.actual, y_pred_df.predicted_prob )
+
+# Finding Optimal Cutoff Probability
+thresholds[0:10]
+fpr[0:10]
+tpr[0:10]
+
+
+# Find optimal cutoff using youden's index
+# Youden's index is where (Sensitivity+Specificity - 1) is maximum.
+# That is when (TPR+TNR -1) is maximum.
+#    max( TPR - (1 - TNR) )
+#    max( TPR - FPR )
+
+tpr_fpr = pd.DataFrame( { 'tpr': tpr, 'fpr': fpr, 'thresholds': thresholds } )
+tpr_fpr['diff'] = tpr_fpr.tpr - tpr_fpr.fpr
+tpr_fpr.sort_values( 'diff', ascending = False )[0:10]
+
+y_pred_df['predicted_new'] = y_pred_df.predicted_prob.map( lambda x: 1 if x > 0.3 else 0)
+draw_cm( y_pred_df.actual, y_pred_df.predicted_new )
+
+#
+## Find optimal cutoff probability using cost
+#
+#cm = metrics.confusion_matrix( y_pred_df.actual, y_pred_df.predicted_new, [1,0] )
+#cm_mat = np.array( cm )
+#cm_mat[1, 0]
+#cm_mat[0, 1]
+#
+#def get_total_cost( actual, predicted ):
+#    cm = metrics.confusion_matrix( actual, predicted, [1,0] )
+#    cm_mat = np.array( cm )
+#    return cm_mat[0,1] * 2 + cm_mat[1,0] * 1
+#
+#get_total_cost( y_pred_df.actual, y_pred_df.predicted_new )
+#
+#cost_df = pd.DataFrame( columns = ['prob', 'cost'])
+#
+#idx = 0
+#for each_prob in range( 20, 50):
+#    cost = get_total_cost( y_pred_df.actual,
+#                          y_pred_df.predicted_prob.map(
+#            lambda x: 1 if x > (each_prob/100)  else 0) )
+#    cost_df.loc[idx] = [(each_prob/100), cost]
+#    idx += 1
+#
+#cost_df.sort_values( 'cost', ascending = True )[0:5]
+#
+#y_pred_df['predicted_final'] = y_pred_df.predicted_prob.map( lambda x: 1 if x > 0.20 else 0)
+#draw_cm( y_pred_df.actual, y_pred_df.predicted_final )
+#
+#print( 'Total Accuracy : ',np.round( metrics.accuracy_score( y_test, y_pred_df.predicted_final ), 2 ) )
+#print( 'Precision : ',np.round( metrics.precision_score( y_test, y_pred_df.predicted_final ), 2 ) )
+#print( 'Recall : ',np.round( metrics.recall_score( y_test, y_pred_df.predicted_final ), 2 ) )
+#
+#cm1 = metrics.confusion_matrix( y_pred_df.actual, y_pred_df.predicted_final, [1,0] )
+#
+#sensitivity = cm1[0,0]/(cm1[0,0]+cm1[0,1])
+#print('Sensitivity : ', round( sensitivity, 2) )
+#
+#specificity = cm1[1,1]/(cm1[1,0]+cm1[1,1])
+#print('Specificity : ', round( specificity, 2 ) )
+#
+## Total accuracy of the model is 67%, becuase the objective is not to improve total accuracy but minimize the quadrants that contribute to the cost.
